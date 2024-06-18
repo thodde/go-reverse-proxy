@@ -1,0 +1,6 @@
+{
+  "backends": [
+    { "address": "http://localhost:8081", "name": "Server 1" },
+    { "address": "http://localhost:8082", "name": "Server 2" }
+  ]
+}

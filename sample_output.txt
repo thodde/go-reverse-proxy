@@ -1,0 +1,20 @@
+~ % curl -H "X-Auth-Token: valid-token-1" http://localhost:8080
+Hello from Server 1!%
+
+~ % curl -H "X-Auth-Token: valid-token-1" http://localhost:8080
+Hello from Server 2!%                                                                                                           
+
+~ % curl -H "X-Auth-Token: valid-token-1" http://localhost:8080
+Hello from Server 1!%                                                                                                           
+
+~ % curl -H "X-Auth-Token: valid-token-2" http://localhost:8080
+Hello from Server 2!%                                                                                                           
+
+~ % curl -H "X-Auth-Token: bad token" http://localhost:8080
+Forbidden
+
+~ % curl http://localhost:8080              
+Forbidden
+
+^C2024/06/17 11:58:12 Server stopping
+2024/06/17 11:58:12 Server stopped
