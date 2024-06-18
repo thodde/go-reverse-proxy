@@ -16,5 +16,12 @@ Forbidden
 ~ % curl http://localhost:8080              
 Forbidden
 
+~ % websocat -H="X-Auth-Token: valid-token-1" ws://localhost:8080/ws
+Hello from ws://localhost:8081!
+hello
+hello
+test
+test
+
 ^C2024/06/17 11:58:12 Server stopping
 2024/06/17 11:58:12 Server stopped

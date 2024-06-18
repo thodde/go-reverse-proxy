@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"golang.org/x/net/websocket"
 )
 
 type BackendConfig struct {
@@ -49,8 +51,13 @@ func readConfig(file string) Config {
 func startServer(addr, name string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s received a request\n", name)
 		fmt.Fprintf(w, "Hello from %s!", name)
 	})
+
+	mux.Handle("/ws", websocket.Handler(func(ws *websocket.Conn) {
+		log.Printf("WebSocket connection established on %s", addr)
+	}))
 
 	server := &http.Server{
 		Addr:    addr,

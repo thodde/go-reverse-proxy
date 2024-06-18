@@ -8,8 +8,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/websocket"
 )
 
 var (
@@ -34,7 +32,7 @@ func main() {
 	mux := http.NewServeMux()
 	// Add two endpoints to the mux
 	mux.HandleFunc("/", authMiddleware(reverseProxyHandler))
-	mux.Handle("/ws", websocket.Handler(wsHandler))
+	mux.Handle("/ws", authMiddleware(wsHandler))
 
 	// Create a new HTTP server
 	server := &http.Server{
