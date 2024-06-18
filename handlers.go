@@ -34,6 +34,8 @@ func reverseProxyHandler(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
+// I am not super confident with my websocket handler. It doesn't exit very gracefully and I needed to
+// do some reading online to get this working.
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get the next backend server
 	target := getNextBackend()
