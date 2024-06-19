@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -14,7 +14,7 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize: 1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool { return true }, // allow all connections
 }
 
 func reverseProxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,8 +34,7 @@ func reverseProxyHandler(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// I am not super confident with my websocket handler. It doesn't exit very gracefully and I needed to
-// do some reading online to get this working.
+// This took me some googling to get working gracefully. Also the gorilla websocket repo has some awesome examples.
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get the next backend server
 	target := getNextBackend()
@@ -44,35 +43,77 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	
 	log.Printf("Proxying request to: %s\n", targetURL)
 
+	// Upgrade the HTTP connection to a WebSocket connection
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 	}
+	defer ws.Close()
 
 	log.Printf("WebSocket connection established\n")
 
-	// format a string with the server name to send back to the client
-	hello_str := fmt.Sprintf("Hello from %s!", targetURL)
-	err = ws.WriteMessage(websocket.TextMessage, []byte(hello_str))
-	if err != nil {
-		log.Println(err)
+	activeWebsockets.Add(1)
+	defer activeWebsockets.Done()
+
+	backendURL := targetURL + "/ws"
+	// Setup headers for WebSocket handshake
+	requestHeader := http.Header{
+		"Origin": {r.Header.Get("Origin")},
 	}
-	// listen for new messages coming in through on the WebSocket connection
-	reader(ws)
+
+	// Establish connection to backend WebSocket
+	backendConn, resp, err := websocket.DefaultDialer.Dial(backendURL, requestHeader)
+	if err != nil {
+		log.Printf("WebSocket Dial error: %v", err)
+		if resp != nil {
+			// Write the response to the client
+			http.Error(w, resp.Status, resp.StatusCode)
+		} else {
+			http.Error(w, "Could not connect to backend WebSocket", http.StatusInternalServerError)
+		}
+		return
+	}
+	defer backendConn.Close()
+
+	log.Printf("WebSocket connection established to backend: %s\n", targetURL)
+
+	errChan := make(chan error, 2)
+
+	// Proxy WebSocket traffic in both directions
+	go reader(ws, backendConn, errChan)
+	go reader(backendConn, ws, errChan)
+
+	// Wait for any error from either direction
+	err = <-errChan
+	if err != nil && err != io.EOF {
+		log.Printf("WebSocket proxy error: %v\n", err)
+	}
+
+	log.Printf("Closing WebSocket connections\n")
 }
 
-func reader(conn *websocket.Conn) {
+func reader(src, dst *websocket.Conn, errChan chan error) {
 	for {
-		messageType, p, err := conn.ReadMessage()
+		messageType, msg, err := src.ReadMessage()
 		if err != nil {
-			log.Println("Error reading message:", err)
+			// If the error is not a normal close, send it to the error channel
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("Error reading message: %v", err)
+				errChan <- err
+			}
+			log.Println("Client closed connection")
 			return
 		}
 
-		log.Println("Received message:", string(p))
+		log.Printf("Received message from %s: %s\n", src.RemoteAddr(), msg)
 
-		if err := conn.WriteMessage(messageType, p); err != nil {
-			log.Println("Error writing message:", err)
+		err = dst.WriteMessage(messageType, msg)
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("Error reading message: %v", err)
+				errChan <- err
+			}
+			log.Println("Client closed connection")
 			return
 		}
 	}

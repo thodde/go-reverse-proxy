@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -17,6 +18,7 @@ var (
 		"valid-token-1": true,
 		"valid-token-2": true,
 	}
+	activeWebsockets sync.WaitGroup
 )
 
 func main() {
@@ -56,11 +58,26 @@ func main() {
 	<-stop
 	log.Println("Server stopping")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(context.Background()); err != nil {
 		log.Fatalf("Server Shutdown Failed:%+v", err)
+	}
+
+	log.Println("Waiting for active WebSocket connections to close...")
+
+	// Wait for active WebSocket connections to close with a timeout
+	shutdownTimeout := 15 * time.Second
+	
+	waitChan := make(chan struct{})
+	go func() {
+		activeWebsockets.Wait()
+		close(waitChan)
+	}()
+
+	select {
+	case <-waitChan:
+		log.Println("All WebSocket connections closed")
+	case <-time.After(shutdownTimeout):
+		log.Println("Timeout reached, forcefully closing remaining WebSocket connections")
 	}
 
 	log.Println("Server stopped")

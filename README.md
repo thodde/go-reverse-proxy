@@ -15,8 +15,6 @@ go build start_backend.go
 ./start_backend
 ```
 
-Note: My websocket handler is not the greatest, but I think the http handler is well done.
-
 Here is a list of curl commands for testing the reverse proxy:
 
 1. Valid token request:
